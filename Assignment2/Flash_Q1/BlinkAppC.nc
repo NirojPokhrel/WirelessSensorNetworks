@@ -1,6 +1,6 @@
 
 /**
- * @author group 5
+ * @author: Group 5
  **/
 
 configuration BlinkAppC
