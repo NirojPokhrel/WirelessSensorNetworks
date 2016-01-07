@@ -24,9 +24,9 @@ implementation
   {
     dutyCycle++;
     if( dutyCycle == 10 )
-      call Leds.led0Toggle();
+      call Leds.led0On();
     else if( dutyCycle == 11 ) {
-      call Leds.led0Toggle();
+      call Leds.led0Off();
       dutyCycle = 0;
     }
   }

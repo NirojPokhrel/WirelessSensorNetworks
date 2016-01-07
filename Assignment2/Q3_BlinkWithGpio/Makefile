@@ -1,3 +1,3 @@
 COMPONENT=BlinkAppC
-TINYOS_ROOT_DIR?=~/wsnpr/tinyos-main
+TINYOS_ROOT_DIR?=$(WSNPR_TOSROOT)
 include $(TINYOS_ROOT_DIR)/Makefile.include
