@@ -11,30 +11,21 @@ implementation {
 	components IPDispatchC;
 	components UdpC;
 	components UDPShellC;
-	components RPLRoutingC;
+	components RPLRoutingC;;
 
 	components StaticIPAddressTosIdC;
 
 	LightP.RadioControl -> IPStackC;
 
-	components new ShellCommandC("read") as ReadCmd;
-	components new ShellCommandC("stream") as StreamCmd;
-	LightP.ReadCmd -> ReadCmd;
-	LightP.StreamCmd -> StreamCmd;
+	components new ShellCommandC("set") as SetCmd;
+	LightP.SetCmd -> SetCmd;
 
 	components new TimerMilliC() as SensorReadTimer;
 	LightP.SensorReadTimer -> SensorReadTimer;
 
 	components new HamamatsuS1087ParC() as SensorPar;
-	LightP.ReadPar -> SensorPar.Read;
 	LightP.StreamPar -> SensorPar.ReadStream;
 
-	components new HamamatsuS10871TsrC() as SensorTsr;
-	LightP.ReadTsr -> SensorTsr.Read;
-
-	components new  SensirionSht11C() as TemperateHumiditySensor;
-	LightP.ReadTemp -> TemperateHumiditySensor.Temperature;
-	LightP.ReadHum -> TemperateHumiditySensor.Humidity;
 #ifdef PRINTFUART_ENABLED
   /* This component wires printf directly to the serial port, and does
    * not use any framing.  You can view the output simply by tailing
