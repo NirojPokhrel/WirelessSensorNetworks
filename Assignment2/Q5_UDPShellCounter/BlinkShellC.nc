@@ -4,7 +4,7 @@ implementation {
 
 	components MainC, BlinkShellP, LedsC;
 	BlinkShellP.Boot -> MainC.Boot;
-  BlinkShellP.Leds -> LedsC;
+  	BlinkShellP.Leds -> LedsC;
 
 	components IPStackC;
 	components UDPShellC;
