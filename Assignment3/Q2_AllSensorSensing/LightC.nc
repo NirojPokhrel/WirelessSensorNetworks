@@ -31,8 +31,6 @@ implementation {
 
 	components new HamamatsuS10871TsrC() as SensorTsr;
 	LightP.ReadTsr -> SensorTsr.Read;
-	LightP.StreamTsr -> SensorTsr.ReadStream;
-
 
 	components new  SensirionSht11C() as TemperateHumiditySensor;
 	LightP.ReadTemp -> TemperateHumiditySensor.Temperature;

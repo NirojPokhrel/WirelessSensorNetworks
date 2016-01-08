@@ -14,7 +14,6 @@ module LightP {
 		interface ReadStream<uint16_t> as StreamPar;
 
 		interface Read<uint16_t> as ReadTsr;
-		interface ReadStream<uint16_t> as StreamTsr;
 
 		interface Read<uint16_t> as ReadTemp;
 
@@ -74,6 +73,7 @@ module LightP {
 		call ReadPar.read();
 		call ReadTsr.read();
 		call ReadTemp.read();
+		call ReadHum.read();
 	}
 
 	event void ReadPar.readDone(error_t e, uint16_t data) {
@@ -102,15 +102,7 @@ module LightP {
 		}
 	}
 
-	event void StreamTsr.readDone(error_t ok, uint32_t usActualPeriod) {
-		if (ok == SUCCESS) {
-			post checkStreamPar();
-		}
-	}
-
 	event void StreamPar.bufferDone(error_t ok, uint16_t *buf,uint16_t count) {}
-
-	event void StreamTsr.bufferDone(error_t ok, uint16_t *buf,uint16_t count) {}
 
 	event char* ReadCmd.eval(int argc, char** argv) {
 		char* reply_buf = call ReadCmd.getBuffer(18);
