@@ -17,7 +17,7 @@ module LightP {
 } implementation {
 
 	enum {
-		SAMPLE_RATE = 2000,
+		SAMPLE_RATE = 250,
 		SAMPLE_SIZE = 10,
 		NUM_SENSORS = 1,
 		ENUM_DEFAULT_THRESHOLD = 0x20,
