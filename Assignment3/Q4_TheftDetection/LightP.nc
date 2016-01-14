@@ -20,7 +20,7 @@ module LightP {
 		SAMPLE_RATE = 250,
 		SAMPLE_SIZE = 10,
 		NUM_SENSORS = 1,
-		ENUM_DEFAULT_THRESHOLD = 0x20,
+		ENUM_DEFAULT_THRESHOLD = 10,
 		ENUM_DEFAULT_SAMPLE_PERIOD = 10000,
 	};
 
@@ -45,7 +45,7 @@ module LightP {
 			val += m_parSamples[i];
 		} 
 		val /= 10; 
-		if( val < 10 ) {
+		if( val < m_threshold ) {
 			call Leds.led0On();
 			call Leds.led1On();
 			call Leds.led2On();

@@ -1,4 +1,6 @@
+#ifndef NEW_PRINTF_SEMANTICS
 #define NEW_PRINTF_SEMANTICS
+#endif
 
 configuration SensingC {
 
@@ -15,8 +17,9 @@ configuration SensingC {
 	components new HamamatsuS1087ParC() as SensorPar;
 	SensingP.LightPar -> SensorPar;
 
-	components new TimerMilliC() as SenseTimer;
-	SensingP.SenseTimer -> SenseTimer;
+  components UDPShellC;
+  components new ShellCommandC("read-par") as ReadParCmd;
+  SensingP.ReadParCmd -> ReadParCmd;
 
 #ifdef PRINTFUART_ENABLED
   /* This component wires printf directly to the serial port, and does
@@ -37,4 +40,7 @@ configuration SensingC {
   // components PrintfC;
   // components SerialStartC;
 #endif
+
+
+
 }
