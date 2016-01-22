@@ -1,13 +1,5 @@
 COMPONENT=LightC
 
-TOSMAKE_PRE_EXE_DEPS = Sensing.py
-Sensing.py: detect.h
-	mkdir -p utils
-	nescc-mig python -I$(TOSROOT)/tos/lib/net/blip \
-	-I$(TOSROOT)/support/sdk/c/blip/lib6lowpan \
-	-python-classname=Sensing detect.h sensing_report \
-	-o utils/Sensing.py
-
 
 CFLAGS += -DCC2420_DEF_CHANNEL=$(TOS_CHANNEL)
 

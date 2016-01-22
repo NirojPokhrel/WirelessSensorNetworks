@@ -1,37 +1,6 @@
 #include <lib6lowpan/ip.h>
 #include <ctype.h>
 
-void ChangeEndianess(uint32_t num, char* output, int len);
-
-void ChangeEndianess(uint32_t num, char* output, int len) {
-	uint16_t shifter = 0;
-
-	switch(len) {
-		case sizeof(uint16_t):
-			output[0] = (num>>24) & 0xff;
-			output[1] = (num>>16) & 0xff;
-			break;
-		case sizeof(uint32_t):
-			output[0] = (num>>24) & 0xff;
-			output[1] = (num>>16) & 0xff;
-			output[2] = (num>>8) & 0xff;
-			output[3] = num & 0xff;
-			break;
-		case sizeof(uint64_t):
-			output[0] = (num>>56) & 0xff;
-			output[1] = (num>>48) & 0xff;
-			output[2] = (num>>40) & 0xff;
-			output[3] = (num>>32) & 0xff;
-			output[4] = (num>>24) & 0xff;
-			output[5] = (num>>16) & 0xff;
-			output[6] = (num>>8) & 0xff;
-			output[7] = num & 0xff;
-			break;
-	}
-
-	//output[0] = (num>>8) & 0xff;
-	//output[1] = num & 0xff;
-}
 
 module EchoP {
 	uses {
@@ -43,6 +12,21 @@ module EchoP {
 	}
 } implementation {
 
+	enum {
+		ENUM_ITEM_NUM_SIZE = sizeof(uint16_t),
+	};
+	void ChangeEndianess(uint32_t num, char* output, int len);
+
+	void ChangeEndianess(uint32_t num, char* output, int len) {
+		uint8_t *pu8Char;
+		int i;
+
+		pu8Char = ((uint8_t*)&num)+len-1;
+		for( i=0; i<len; i++ ) {
+			*output++ = *pu8Char--;
+		}
+	}
+
 	event void Boot.booted() {
 		call RadioControl.start();
 		call Echo.bind(7);
@@ -52,9 +36,9 @@ module EchoP {
 	event void Echo.recvfrom(struct sockaddr_in6 *from, void *data,
 			  uint16_t len, struct ip6_metadata *meta) {
 		char* str = data;
-		uint16_t i;
+		uint32_t i;
 		bool isNumber = TRUE;
-		char output[8];
+		char output[ENUM_ITEM_NUM_SIZE];
 
 		for (i = 0; i < len - 1; i++) {
 			if (!isdigit(str[i])) {
@@ -66,8 +50,8 @@ module EchoP {
 		if (isNumber) {
 			//Check atoi ( online if this is what it is supposed to do)
 			i = atol(str);
-			ChangeEndianess(i, output, sizeof(uint16_t));
-			call Echo.sendto(from, output, sizeof(uint16_t));
+			ChangeEndianess(i, output, ENUM_ITEM_NUM_SIZE);
+			call Echo.sendto(from, output, ENUM_ITEM_NUM_SIZE);
 			//call Echo.sendto(from, &i, sizeof(uint32_t));
 		} else { 
 			call Echo.sendto(from, data, len);

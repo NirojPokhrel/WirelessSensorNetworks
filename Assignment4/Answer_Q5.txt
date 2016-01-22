@@ -1,0 +1,14 @@
+Q5. Explain decision for making the message type as it is.
+
+nx_struct theft_report {
+  nx_uint16_t seqno;
+  nx_uint16_t pos_x;
+  nx_uint16_t pos_y;
+  nx_uint16_t item_type;
+} ;
+
+seqno is used to identify the sequence number of the current frame and find out the total number of theft attempt made in the item.
+
+pos_x, pos_y: It can be used to quickly identify the location of the item so that the thief can be caught immediately after the attempt.
+
+item_type: It can be used to identify what is the item being stolen.

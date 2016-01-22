@@ -24,8 +24,9 @@ module LightP {
 		NUM_SENSORS = 1,
 		ENUM_DEFAULT_THRESHOLD = 10,
 		ENUM_DEFAULT_SAMPLE_PERIOD = 10000,
-		ENUM_POSITION_OF_SENSOR_X = 20,
-		ENUM_POSITION_OF_SENSOR_Y = 50,
+		ENUM_ITEM_POSITION_X = 20,
+		ENUM_ITEM_POSITION_Y = 50,
+		ENUM_ITEM_TYPE_GOLD = 101,
 	};
 
 	uint8_t m_remaining = NUM_SENSORS;
@@ -35,7 +36,7 @@ module LightP {
 	uint16_t m_threshold = ENUM_DEFAULT_THRESHOLD;
 	uint16_t m_samplePeriod = ENUM_DEFAULT_SAMPLE_PERIOD;
 
-	nx_struct sensing_report stats;
+	nx_struct theft_report stats;
 	struct sockaddr_in6 route_dest;
 
 	event void Boot.booted() {
@@ -44,8 +45,9 @@ module LightP {
 
 	task void report_lightPar() {
 		stats.seqno++;
-		stats.sender = TOS_NODE_ID;
-		stats.humidity = m_threshold;
+		stats.pos_x = ENUM_ITEM_POSITION_X;
+		stats.pos_y = ENUM_ITEM_POSITION_Y;
+		stats.item_type = ENUM_ITEM_TYPE_GOLD;
 		call SenseSend.sendto(&route_dest, &stats, sizeof(stats));
 	}
 
