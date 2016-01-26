@@ -1,5 +1,5 @@
 #define NEW_PRINTF_SEMANTICS
-
+#define USE_TEMPERATURE_SENSOR
 configuration LightC {
 }
 implementation {
@@ -28,15 +28,21 @@ implementation {
 
 	components new TimerMilliC() as InitialWaitTimer;
 	LightP.InitialWaitTimer -> InitialWaitTimer;
-
+#if defined(USE_LIGHT_SENSOR)
 	components new HamamatsuS1087ParC() as SensorPar;
 	LightP.StreamPar -> SensorPar.ReadStream;
-
+#else if defined(USE_TEMPERATURE_SENSOR)
+	components new  SensirionSht11C() as TemperateHumiditySensor;
+	LightP.ReadTemp -> TemperateHumiditySensor.Temperature;
+#endif
 	components new UdpSocketC() as SenseSend;
 	LightP.SenseSend -> SenseSend;
 	
 	components new UdpSocketC() as Settings;
 	LightP.Settings -> Settings;
+
+	components new UdpSocketC() as ReportDst;
+	LightP.ReportDst -> ReportDst;
 #ifdef PRINTFUART_ENABLED
   /* This component wires printf directly to the serial port, and does
    * not use any framing.  You can view the output simply by tailing

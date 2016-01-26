@@ -3,10 +3,9 @@ import SmokeDetection
 import re
 import sys
 
-port = 7000
+port = 8000
 
 if __name__ == '__main__':
-	socket.inet_pton(socket.AF_INET6, "ff02::1")
 	s = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
 
 	s.bind(('', port))
