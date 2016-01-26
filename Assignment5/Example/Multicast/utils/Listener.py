@@ -16,7 +16,7 @@ if __name__ == '__main__':
         if (len(data) > 0):
 
             rpt = Sensing.Sensing(data=data, data_length=len(data))
-            
+
             print addr
             print rpt
 
