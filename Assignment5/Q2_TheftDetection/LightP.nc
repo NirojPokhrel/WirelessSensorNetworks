@@ -32,7 +32,8 @@ module LightP {
 #if defined(USE_LIGHT_SENSOR)
 		ENUM_DEFAULT_THRESHOLD = 10,
 #else if defined(USE_TEMPERATURE_SENSOR)
-		ENUM_DEFAULT_THRESHOLD = 100,
+		//More than the room temperature
+		ENUM_DEFAULT_THRESHOLD = 6510,
 #endif
 		ENUM_DEFAULT_SAMPLE_PERIOD = 10000,
 		ENUM_SETTINGS_REQUEST = 1,
@@ -41,9 +42,12 @@ module LightP {
 	};
 
 	uint8_t m_responseReceived = 0;
+#if defined(USE_LIGHT_SENSOR)
 	uint16_t m_parSamples[SAMPLE_SIZE];
-	uint16_t m_threshold;
+#else if defined(USE_TEMPERATURE_SENSOR)
 	uint16_t m_temp;
+#endif
+	uint16_t m_threshold;
 	uint16_t m_samplePeriod;
 	uint16_t m_sampleTime;
 
@@ -74,12 +78,9 @@ module LightP {
 			m_threshold = ENUM_DEFAULT_THRESHOLD;
 			m_samplePeriod = SAMPLE_RATE;
 			m_sampleTime = ENUM_DEFAULT_SAMPLE_PERIOD;
-
-			//If no response is received start sampling with the default value
-			call SensorReadTimer.startPeriodic(m_samplePeriod);
-		} else {
-			call SensorReadTimer.startPeriodic(m_samplePeriod);
 		}
+		//After getting the configuration start reading
+		call SensorReadTimer.startPeriodic(m_samplePeriod);
 	}
 
 
@@ -160,10 +161,11 @@ module LightP {
 			val += m_parSamples[i];
 		} 
 		val /= 10; 
+		if( val < m_threshold ) {
 #else if defined(USE_TEMPERATURE_SENSOR)
 		val = m_temp;
+		if( val > m_threshold ) {
 #endif
-		if( val < m_threshold ) {
 			call Leds.led0On();
 			call Leds.led1On();
 			call Leds.led2On();

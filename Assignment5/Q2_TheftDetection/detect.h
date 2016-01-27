@@ -1,6 +1,6 @@
 #ifndef SENSING_H_
 #define SENSING_H_
-#define USE_TEMPERATURE_SENSOR
+#define USE_LIGHT_SENSOR
 enum {
       AM_THEFT_REPORT = -1
 };

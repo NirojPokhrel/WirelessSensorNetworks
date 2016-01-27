@@ -1,5 +1,8 @@
+#include "detect.h"
+#ifndef NEW_PRINTF_SEMANTICS
 #define NEW_PRINTF_SEMANTICS
-#define USE_TEMPERATURE_SENSOR
+#endif
+
 configuration LightC {
 }
 implementation {

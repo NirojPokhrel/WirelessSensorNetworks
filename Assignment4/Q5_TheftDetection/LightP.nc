@@ -72,7 +72,6 @@ module LightP {
 	}
 
 
-
 	event void SensorReadTimer.fired() {
 		call StreamPar.postBuffer(m_parSamples, SAMPLE_SIZE);
 		call StreamPar.read(m_samplePeriod);
