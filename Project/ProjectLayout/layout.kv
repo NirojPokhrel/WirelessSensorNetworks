@@ -1,0 +1,69 @@
+<NodeScreen>
+    BoxLayout:
+        Label:
+            font_size: 40
+            center_x: root.width / 2
+            top: root.top
+            text: "Adhoc and Wireless Sensors Networks"
+
+        Label:
+            font_size: 20
+            center_x: root.width / 2
+            top: root.top - 100
+            text: "NODE ID = 1"
+
+        Label:
+            font_size: 20
+            center_x: root.width / 2
+            top: root.top - 150
+            text: "Average Temp: 6389"
+
+        Label:
+            font_size: 20
+            center_x: root.width / 2
+            top: root.top - 200
+            text: "Average Humidity: 450"
+
+        Label:
+            font_size: 20
+            center_x: root.width / 2
+            top: root.top - 250
+            text: "Average Par: 20"
+
+        Button:
+            center_x: root.width/4
+            font_size: 20
+            top: root.top - 300
+            text: "Back"
+            on_press: root.manager.current = 'home'
+
+<HomeScreen>
+    BoxLayout:
+        btn1: button_one
+        btn2: button_two
+        Label:
+            font_size: 40
+            center_x: root.width / 2
+            top: root.top
+            text: "Adhoc and Wireless Sensors Networks"
+
+        Label:
+            font_size: 20
+            center_x: root.width / 2
+            top: root.top - 50
+            text: "Number of nodes in network = 2"
+
+        Button:
+            id: button_one
+            center_x: root.width/4
+            font_size: 20
+            top: root.top - 200
+            text: "Node 1"
+            on_press: root.manager.current = 'node'
+
+        Button:
+            id: button_two
+            font_size: 20
+            top: root.top - 200
+            center_x: 3* root.width/4
+            text: "Node 2"
