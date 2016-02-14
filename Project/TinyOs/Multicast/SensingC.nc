@@ -28,4 +28,10 @@ configuration SensingC {
 
 	components new TimerMilliC() as WaitTimer;
 	SensingP.WaitTimer -> WaitTimer;
+	components new TimerMilliC() as SyncTimer;
+	SensingP.SyncTimer -> SyncTimer;
+	components new TimerMilliC() as SenseTimer;
+	SensingP.SenseTimer -> SenseTimer;
+	components new TimerMilliC() as WatchDogTimer;
+	SensingP.WatchDogTimer -> WatchDogTimer;
 }

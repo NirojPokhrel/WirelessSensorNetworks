@@ -16,17 +16,24 @@ module SensingP {
 #endif
 
 		interface Timer<TMilli> as WaitTimer;
+		interface Timer<TMilli> as SyncTimer;
+		interface Timer<TMilli> as SenseTimer;
+		interface Timer<TMilli> as WatchDogTimer;
 	}
 } implementation {
 	task void multicast_leaderSelection();
 	task void multicast_requestNodeid();
 	task void replyNodeInfo();
 	task void assign_role();
+	task void sync_role();
+	task void request_resendSyncRole();
 
 	void checkLeaderSelectionPkt( void *data );
 	void replyNodeIdToLeader(void *data);
 	void addSlaveToNetwork(void *data);
 	void addRoleToSlaves(void *data );
+
+	void syncRoles(void *data);
 
 	struct sockaddr_in6 route_dest;
 	struct sockaddr_in6 multicast;
@@ -58,6 +65,8 @@ module SensingP {
 		sensorState.m_u8LeaderId = TOS_NODE_ID;
 		sensorState.m_u8LeaderBatteryLevel = TOS_NODE_ID+10;
 		sensorState.m_u8LastRequest = 0;
+		sensorState.m_u8NodePresent = 0;
+		sensorState.m_u8NodePresent = setBit(sensorState.m_u8NodePresent, TOS_NODE_ID );
 
 		leaderState.m_u8NumOfSlavesInNetwork = 0;
 #if ENABLE_DEBUG
@@ -94,6 +103,8 @@ module SensingP {
 		if( argc > 1  ){
 			if( atoi(argv[1]) == 1 ) {
 				sprintf(retValue, "NodeId=%d\nBatteryLevel=%d\nRequestId=%d\n", debugInfo.m_puLastPacket.m_u8NodeId, debugInfo.m_puLastPacket.m_u8BatteryLevel, debugInfo.m_puLastPacket.m_u8RequestId );
+			} else if (atoi(argv[1]) == 2 ) {
+				sprintf( retValue, "NodePresent=%d\nSense=%d\nStandby=%d\nFailure=%d\n", sensorState.m_u8NodePresent, sensorState.m_sSyncInfo.m_u8SenseRole, sensorState.m_sSyncInfo.m_u8StandyRole, sensorState.m_sSyncInfo.m_u8FailureRole );
 			}
 		} else {
 			sprintf(retValue, "Lead=%d\nLeadBat=%d\nNumPack=%d\nTwoC=%d\nThreeC=%d\nFourC=%d\nNo=%d\nLReq=%d\n", sensorState.m_u8LeaderId, sensorState.m_u8LeaderBatteryLevel, debugInfo.m_u8NumberOfPackets, debugInfo.m_u8CountNodeTwo, debugInfo.m_u8CountNodeThree, debugInfo.m_u8CountNodeFour, debugInfo.m_u8CountNothing, sensorState.m_u8LastRequest );
@@ -150,10 +161,22 @@ module SensingP {
 					}
 				}
 			break;
-*/
 			case MESSAGE_TYPE_LEADER_ASSIGN_ROLE:
 				if( sizeof(slave_info_t) == headerPtr->m_u8PayloadSize ) {
 					addRoleToSlaves(tempData + sizeof(header_t));
+				}
+			break;
+*/
+			case MESSAGE_TYPE_LEADER_SYNC_ROLE:
+				if( sizeof(sync_packet_t) == headerPtr->m_u8PayloadSize ) {
+					syncRoles(tempData+sizeof(header_t));
+				}
+			break;
+			case MESSAGE_TYPE_LEADER_SYNC_ROLE_RESEND:
+				if( TOS_NODE_ID == sensorState.m_u8LeaderId ) {
+					if( !headerPtr->m_u8PayloadSize ) {
+  						post sync_role();
+					}
 				}
 			break;
 
@@ -178,6 +201,7 @@ module SensingP {
 		if( leaderSelectionData->m_u8NodeId > 10 )
 			return;
 
+		sensorState.m_u8NodePresent = setBit(sensorState.m_u8NodePresent, leaderSelectionData->m_u8NodeId );
 		if( sensorState.m_u8LeaderBatteryLevel < leaderSelectionData->m_u8BatteryLevel) {
 			sensorState.m_u8LeaderBatteryLevel = leaderSelectionData->m_u8BatteryLevel;
 			sensorState.m_u8LeaderId = leaderSelectionData->m_u8NodeId;
@@ -185,7 +209,7 @@ module SensingP {
 			if( TOS_NODE_ID > leaderSelectionData->m_u8NodeId ) {
 				sensorState.m_u8LeaderId = leaderSelectionData->m_u8NodeId;
 			}
-		} //else
+		} 
 		if( TOS_NODE_ID  == (leaderSelectionData->m_u8NodeId+1)) 
 		{
 			post multicast_leaderSelection();
@@ -228,11 +252,51 @@ module SensingP {
 
 	void addRoleToSlaves(void *data ) {
 		slave_info_t *psSlavePkt = (slave_info_t*)data;
+
+		//call Leds.led1On();
 		if( TOS_NODE_ID == psSlavePkt->m_u8SlaveId ) {
 			if( SENSOR_STATE_SENSE == psSlavePkt->m_u8SlaveRole ) {
 				call Leds.led1On();
 			} else if( SENSOR_STATE_STANDY == psSlavePkt->m_u8SlaveRole ) {
 				call Leds.led2On();
+			}
+		}
+	}
+
+	void syncRoles(void *data) {
+		memcpy( &sensorState.m_sSyncInfo, data, sizeof(sync_packet_t));
+
+		if( getBit(sensorState.m_sSyncInfo.m_u8SenseRole, TOS_NODE_ID) ) {
+			call Leds.led1On();
+		} else if( getBit(sensorState.m_sSyncInfo.m_u8StandyRole, TOS_NODE_ID) ) {
+			call Leds.led2On();
+		} else if( getBit(sensorState.m_sSyncInfo.m_u8FailureRole, TOS_NODE_ID ) ) {
+			call Leds.set(7);
+		}
+	}
+
+	void leader_assign_role() {
+		uint8_t i, count = 0;
+
+		memset(&sensorState.m_sSyncInfo, 0, sizeof(sync_packet_t));
+		for( i=2; i<8; i++ ) {
+			if( i == TOS_NODE_ID ) 
+				continue;
+			if(getBit(sensorState.m_u8NodePresent, i)) {
+				sensorState.m_sSyncInfo.m_u8SenseRole = setBit(sensorState.m_sSyncInfo.m_u8SenseRole, i);
+				count++;
+				if( count >= 2 ) {
+					i++;
+					break;
+				}
+			}
+		}
+
+		for( ; i<8; i++ ) {
+			if( i == TOS_NODE_ID ) 
+				continue;
+			if(getBit(sensorState.m_u8NodePresent, i)) {
+				sensorState.m_sSyncInfo.m_u8StandyRole = setBit(sensorState.m_sSyncInfo.m_u8StandyRole, i);
 			}
 		}
 	}
@@ -243,9 +307,25 @@ module SensingP {
   			//Send the confirmation mail to all other nodes.
   			//
   			sensorState.m_u8NodeRole = SENSOR_STATE_LEADER;
-  			post multicast_requestNodeid();
+  			//post multicast_requestNodeid();
+  			leader_assign_role();
+  			post sync_role();
   			call Leds.led0On();
-  		} 
+  		} else {
+  			call SyncTimer.startOneShot(2000);
+  		}
+  	}
+
+  	event void SyncTimer.fired() {
+  		if(!sensorState.m_sSyncInfo.m_u8SenseRole) {
+  			post request_resendSyncRole();
+  		}
+  	}
+
+  	event void SenseTimer.fired() {
+  	}
+
+  	event void WatchDogTimer.fired() {
   	}
 	
 	task void multicast_requestNodeid() {
@@ -294,5 +374,28 @@ module SensingP {
 		memcpy( psSlavePkt, &leaderState.m_sCurrentSlave, sizeof(slave_info_t));
 
 		call UserPacket.sendto(&multicast, settingsBuffer, psPktHeader->m_u8PayloadSize + sizeof(header_t));
+	}
+
+	task void sync_role() {
+		sync_packet_t *psSyncPkt;
+		header_t *psPktHeader;
+
+		psPktHeader = (header_t*)settingsBuffer;
+		psPktHeader->m_u8Type = MESSAGE_TYPE_LEADER_SYNC_ROLE;
+		psPktHeader->m_u8PayloadSize = sizeof(sync_packet_t);
+
+		psSyncPkt = (sync_packet_t*) (settingsBuffer+sizeof(header_t));
+		memcpy( psSyncPkt, &sensorState.m_sSyncInfo, sizeof(sync_packet_t));
+		call UserPacket.sendto(&multicast, settingsBuffer, psPktHeader->m_u8PayloadSize + sizeof(header_t));
+	}
+
+	task void request_resendSyncRole() {
+		header_t *psPktHeader;
+
+		psPktHeader = (header_t*)settingsBuffer;
+		psPktHeader->m_u8Type = MESSAGE_TYPE_LEADER_SYNC_ROLE_RESEND;
+		psPktHeader->m_u8PayloadSize = 0;
+
+		call UserPacket.sendto(&multicast, settingsBuffer, sizeof(header_t));
 	}
 }
