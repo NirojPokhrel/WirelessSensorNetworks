@@ -2,7 +2,8 @@
 #define SENSING_H_
 
 #include <IPDispatch.h>
-#define MAX_NUMBER_OF_SLAVES 10
+#define MAX_NUMBER_OF_SLAVES 8
+#define ENABLE_DEBUG 1
 enum {
   AM_SENSING_REPORT = -1,
   SENSOR_STATE_LEADER = 50,
@@ -45,6 +46,7 @@ typedef struct sensor_state {
 	uint8_t m_u8LeaderId;
 	uint8_t m_u8BatteryLevel;
 	uint8_t m_u8LeaderBatteryLevel;
+	uint8_t m_u8LastRequest;
 } sensor_state_t;
 
 typedef struct slaveinfo {
@@ -61,14 +63,40 @@ typedef struct leader_state {
 typedef struct leaderSelectionState {
 	nx_uint8_t m_u8BatteryLevel;
 	nx_uint8_t m_u8NodeId;
+	nx_uint8_t m_u8RequestId;
 } leader_selection_t;
 
 typedef struct slaveReplyState {
 	nx_uint8_t m_u8NodeId;
 } slave_reply_t;
 
+typedef struct syncPacket {
+	uint8_t m_u8NodeRole;
+	uint8_t m_u8FailureNode;
+} sync_packet_t;
+
+int getBit( uint8_t val, uint8_t pos ) {
+	if( val & (1<<pos) ) {
+		return 1;
+	}
+
+	return 0;
+}
+
+int setBit( uint8_t val, uint8_t pos ) {
+	return (val|(1<<pos));
+}
+#if ENABLE_DEBUG
+typedef struct debugInfo {
+	uint8_t m_u8NumberOfPackets;
+	uint8_t m_u8CountNodeTwo;
+	uint8_t m_u8CountNodeThree;
+	uint8_t m_u8CountNodeFour;
+	uint8_t m_u8CountNothing;
+	leader_selection_t m_puLastPacket;
+} debug_info_t;
+#endif
 
 #define REPORT_DEST "fec0::100"
 #define MULTICAST "ff02::1"
-char arr[10][10] = { "fec0::2", "fec0::3", "fec0::4", "fec0::5", "fec0::6", "fec0::7", "fec0::8", "fec0::9", "fec0::10", "fec0::11" };
 #endif

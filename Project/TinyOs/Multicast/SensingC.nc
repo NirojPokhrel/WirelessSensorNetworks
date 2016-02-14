@@ -1,4 +1,5 @@
 #include "StorageVolumes.h"
+#include "sensing.h"
 
 configuration SensingC {
 
@@ -20,7 +21,10 @@ configuration SensingC {
 
 	components new ShellCommandC("start") as StartNwrkCmd;
 	SensingP.StartNwrkCmd -> StartNwrkCmd;
-
+#if ENABLE_DEBUG
+	components new ShellCommandC("debug") as DebugCmd;
+	SensingP.DebugCmd -> DebugCmd;
+#endif
 
 	components new TimerMilliC() as WaitTimer;
 	SensingP.WaitTimer -> WaitTimer;
