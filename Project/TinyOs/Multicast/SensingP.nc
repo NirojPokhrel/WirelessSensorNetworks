@@ -1,5 +1,5 @@
 #include <lib6lowpan/ip.h>
-#include "sensing.h"
+#include "tolerant.h"
 #include "blip_printf.h"
 
 module SensingP {
@@ -19,6 +19,9 @@ module SensingP {
 		interface Timer<TMilli> as SyncTimer;
 		interface Timer<TMilli> as SenseTimer;
 		interface Timer<TMilli> as WatchDogTimer;
+		interface Timer<TMilli> as DataCollectionTimer;
+
+		interface Read<uint16_t> as LightPar;
 	}
 } implementation {
 	task void multicast_leaderSelection();
@@ -27,25 +30,35 @@ module SensingP {
 	task void assign_role();
 	task void sync_role();
 	task void request_resendSyncRole();
+	task void send_data();
+	task void report_data_to_admin();
 
 	void checkLeaderSelectionPkt( void *data );
 	void replyNodeIdToLeader(void *data);
 	void addSlaveToNetwork(void *data);
 	void addRoleToSlaves(void *data );
-
 	void syncRoles(void *data);
+
+	void store_data(void *data);
+	void add_node_for_storage( uint8_t pos, uint8_t node );
+	void add_data( uint8_t node, uint16_t data );
+	void check_data_sanity();
 
 	struct sockaddr_in6 route_dest;
 	struct sockaddr_in6 multicast;
 
 	//Niroj
 	nx_uint8_t settingsBuffer[20];
+	nx_uint8_t dataBuffer[20];
 	uint8_t tempData[20];
 	leader_selection_t leaderPkt;
 	header_t pktHeader;
 	sensor_state_t sensorState;
 	leader_state_t leaderState;
 	uint8_t u8Reset;
+
+
+	nx_struct alarm_report reportAdmin;
 #if ENABLE_DEBUG
 	debug_info_t debugInfo;
 #endif
@@ -105,6 +118,8 @@ module SensingP {
 				sprintf(retValue, "NodeId=%d\nBatteryLevel=%d\nRequestId=%d\n", debugInfo.m_puLastPacket.m_u8NodeId, debugInfo.m_puLastPacket.m_u8BatteryLevel, debugInfo.m_puLastPacket.m_u8RequestId );
 			} else if (atoi(argv[1]) == 2 ) {
 				sprintf( retValue, "NodePresent=%d\nSense=%d\nStandby=%d\nFailure=%d\n", sensorState.m_u8NodePresent, sensorState.m_sSyncInfo.m_u8SenseRole, sensorState.m_sSyncInfo.m_u8StandyRole, sensorState.m_sSyncInfo.m_u8FailureRole );
+			} else if ( atoi(argv[1] ) == 3 ) {
+				sprintf( retValue, "Avg=%d\nS0=%d\nS1=%d\nS2=%d\n", sensorState.m_u16AverageData, debugInfo.m_u16Sensor0, debugInfo.m_u16Sensor1, debugInfo.m_u16Sensor2 );
 			}
 		} else {
 			sprintf(retValue, "Lead=%d\nLeadBat=%d\nNumPack=%d\nTwoC=%d\nThreeC=%d\nFourC=%d\nNo=%d\nLReq=%d\n", sensorState.m_u8LeaderId, sensorState.m_u8LeaderBatteryLevel, debugInfo.m_u8NumberOfPackets, debugInfo.m_u8CountNodeTwo, debugInfo.m_u8CountNodeThree, debugInfo.m_u8CountNodeFour, debugInfo.m_u8CountNothing, sensorState.m_u8LastRequest );
@@ -176,6 +191,14 @@ module SensingP {
 				if( TOS_NODE_ID == sensorState.m_u8LeaderId ) {
 					if( !headerPtr->m_u8PayloadSize ) {
   						post sync_role();
+					}
+				}
+			break;
+			case MESSAGE_TYPE_DATA_PACKET:
+				//Process the data only if it is a leader
+				if( TOS_NODE_ID == sensorState.m_u8LeaderId ) {
+					if( sizeof(data_packet_t) == headerPtr->m_u8PayloadSize) {
+						store_data(tempData+sizeof(header_t));
 					}
 				}
 			break;
@@ -268,6 +291,9 @@ module SensingP {
 
 		if( getBit(sensorState.m_sSyncInfo.m_u8SenseRole, TOS_NODE_ID) ) {
 			call Leds.led1On();
+			call SenseTimer.startPeriodic(3000);
+			//call WatchDogTimer.startOneShot(20000);
+			//Wait for 20 seconds to be contacted from the leader otherwise select the next leader and proceed.
 		} else if( getBit(sensorState.m_sSyncInfo.m_u8StandyRole, TOS_NODE_ID) ) {
 			call Leds.led2On();
 		} else if( getBit(sensorState.m_sSyncInfo.m_u8FailureRole, TOS_NODE_ID ) ) {
@@ -279,12 +305,15 @@ module SensingP {
 		uint8_t i, count = 0;
 
 		memset(&sensorState.m_sSyncInfo, 0, sizeof(sync_packet_t));
+
+		add_node_for_storage( 0, TOS_NODE_ID);
 		for( i=2; i<8; i++ ) {
 			if( i == TOS_NODE_ID ) 
 				continue;
 			if(getBit(sensorState.m_u8NodePresent, i)) {
 				sensorState.m_sSyncInfo.m_u8SenseRole = setBit(sensorState.m_sSyncInfo.m_u8SenseRole, i);
 				count++;
+				add_node_for_storage(count,i);
 				if( count >= 2 ) {
 					i++;
 					break;
@@ -301,6 +330,94 @@ module SensingP {
 		}
 	}
 
+	void store_data(void *data) {
+		uint8_t nodeId;
+		uint16_t sensorData;
+		data_packet_t *psDataPkt;
+
+		psDataPkt = (data_packet_t*) data;
+		nodeId = psDataPkt->m_u8NodeId;
+		sensorData = psDataPkt->m_u16Data;
+
+		add_data(nodeId, sensorData);
+	}
+
+	void add_node_for_storage( uint8_t pos, uint8_t node ) {
+		sensorState.m_sStorageData.m_u8NodeId[pos] = node;
+	}
+
+	void add_data( uint8_t node, uint16_t data ) {
+		uint8_t i=0;
+
+		for( ;i<3; i++ ) {
+			if( sensorState.m_sStorageData.m_u8NodeId[i] == node ) {
+				sensorState.m_sStorageData.m_u16Data[i] = data;
+				sensorState.m_sStorageData.m_u8DataAvail[i] = 1;
+				break;
+			}
+		}
+	}
+
+	void check_data_sanity() {
+		uint8_t i=0, a1=0, a2=0, a3=0;
+		uint16_t u16Average = 0;
+
+		for( ; i<3; i++ ) {
+			if( sensorState.m_sStorageData.m_u8DataAvail[i] != 1 ) {
+				//Increase Data Absence bit
+				sensorState.m_sStorageData.m_u16Data[0] = 0;
+			}
+		}
+
+		if( get_absolute( sensorState.m_sStorageData.m_u16Data[0] - sensorState.m_sStorageData.m_u16Data[1] ) > 20 ) {
+			a1 = 1;
+		}
+
+		if( get_absolute( sensorState.m_sStorageData.m_u16Data[1] - sensorState.m_sStorageData.m_u16Data[2] ) > 20 ) {
+			a2 = 1;
+		}
+
+		if( get_absolute( sensorState.m_sStorageData.m_u16Data[0] - sensorState.m_sStorageData.m_u16Data[2] ) > 20 ) {
+			a3 = 1;
+		}
+		if( a1 && a2 && a3 ) {
+			//All nodes have failed
+			u16Average = 0;
+		} else if( a1 && a3 ) {
+			//0 has failed
+			u16Average = (sensorState.m_sStorageData.m_u16Data[1] + sensorState.m_sStorageData.m_u16Data[2])>>1;
+		} else if( a2 && a3 ) {
+			//2 has failed
+			u16Average = (sensorState.m_sStorageData.m_u16Data[0] + sensorState.m_sStorageData.m_u16Data[1])>>1;
+		} else if( a1 && a2 ) {
+			//1 has failed
+			u16Average = (sensorState.m_sStorageData.m_u16Data[0] + sensorState.m_sStorageData.m_u16Data[2])>>1;
+		} else if( a1 || a2 || a3 ) {
+			//Some anomaly is occuring
+			u16Average = (sensorState.m_sStorageData.m_u16Data[0] + sensorState.m_sStorageData.m_u16Data[1] + sensorState.m_sStorageData.m_u16Data[2] )/3;
+		} else {
+			//Send average of three
+			u16Average = (sensorState.m_sStorageData.m_u16Data[0] + sensorState.m_sStorageData.m_u16Data[1] + sensorState.m_sStorageData.m_u16Data[2] )/3;
+		}
+		sensorState.m_u16AverageData = u16Average;
+		memset( &sensorState.m_sStorageData.m_u8DataAvail, 0, sizeof(sensorState.m_sStorageData.m_u8DataAvail));
+#if ENABLE_DEBUG
+		debugInfo.m_u16Sensor0 = sensorState.m_sStorageData.m_u16Data[0];
+		debugInfo.m_u16Sensor1 = sensorState.m_sStorageData.m_u16Data[1];
+		debugInfo.m_u16Sensor2 = sensorState.m_sStorageData.m_u16Data[2];
+#endif
+		post report_data_to_admin();
+	}
+
+	event void LightPar.readDone(error_t e, uint16_t val) {
+		sensorState.m_u16LighPar = val;
+		if( TOS_NODE_ID != sensorState.m_u8LeaderId ) {
+			post send_data();
+		} else {
+			add_data(TOS_NODE_ID, val);
+		}
+	}
+
   	event void WaitTimer.fired() {
   		//call Leds.set(sensorState.m_u8LeaderId);
   		if( TOS_NODE_ID == sensorState.m_u8LeaderId ) {
@@ -311,6 +428,8 @@ module SensingP {
   			leader_assign_role();
   			post sync_role();
   			call Leds.led0On();
+			call SenseTimer.startPeriodic(3000);
+			call DataCollectionTimer.startPeriodic(5000);
   		} else {
   			call SyncTimer.startOneShot(2000);
   		}
@@ -319,13 +438,19 @@ module SensingP {
   	event void SyncTimer.fired() {
   		if(!sensorState.m_sSyncInfo.m_u8SenseRole) {
   			post request_resendSyncRole();
-  		}
+  		} 
   	}
 
   	event void SenseTimer.fired() {
+		call LightPar.read();
   	}
 
   	event void WatchDogTimer.fired() {
+
+  	}
+
+  	event void DataCollectionTimer.fired() {
+  		check_data_sanity();
   	}
 	
 	task void multicast_requestNodeid() {
@@ -397,5 +522,26 @@ module SensingP {
 		psPktHeader->m_u8PayloadSize = 0;
 
 		call UserPacket.sendto(&multicast, settingsBuffer, sizeof(header_t));
+	}
+
+	task void send_data() {
+		data_packet_t *psDataPkt;
+		header_t *psPktHeader;
+
+		psPktHeader = (header_t*)dataBuffer;
+		psPktHeader->m_u8Type = MESSAGE_TYPE_DATA_PACKET;
+		psPktHeader->m_u8PayloadSize = sizeof(data_packet_t);
+
+		psDataPkt = (data_packet_t*) (dataBuffer+sizeof(header_t));
+		psDataPkt->m_u8NodeId = TOS_NODE_ID;
+		psDataPkt->m_u16Data = sensorState.m_u16LighPar;
+		call UserPacket.sendto(&multicast, dataBuffer, psPktHeader->m_u8PayloadSize + sizeof(header_t));
+	}
+
+	task void report_data_to_admin() {
+		reportAdmin.node_id = TOS_NODE_ID;
+		reportAdmin.sensor_value = sensorState.m_u16AverageData;
+
+		call UserPacket.sendto(&route_dest, &reportAdmin, sizeof(reportAdmin));
 	}
 }

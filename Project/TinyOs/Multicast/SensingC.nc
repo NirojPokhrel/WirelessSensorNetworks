@@ -1,5 +1,5 @@
 #include "StorageVolumes.h"
-#include "sensing.h"
+#include "tolerant.h"
 
 configuration SensingC {
 
@@ -34,4 +34,10 @@ configuration SensingC {
 	SensingP.SenseTimer -> SenseTimer;
 	components new TimerMilliC() as WatchDogTimer;
 	SensingP.WatchDogTimer -> WatchDogTimer;
+	components new TimerMilliC() as DataCollectionTimer;
+	SensingP.DataCollectionTimer -> DataCollectionTimer;
+
+	
+	components new HamamatsuS1087ParC() as SensorPar;
+	SensingP.LightPar -> SensorPar;
 }
