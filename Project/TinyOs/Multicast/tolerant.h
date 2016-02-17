@@ -50,9 +50,10 @@ typedef struct dataPacket {
 } data_packet_t;
 
 typedef struct dataStorage {
-	nx_uint8_t m_u8DataAvail[3];
-	nx_uint8_t m_u8NodeId[3];
-	nx_uint16_t m_u16Data[3];
+	uint8_t m_u8DataAvail[3];
+	uint8_t m_u8NodeId[3];
+	uint16_t m_u16Data[3];
+	uint16_t m_u16FailureCount[3];
 } data_storage_t;
 
 typedef struct sensor_state { 
@@ -92,11 +93,6 @@ typedef struct slaveReplyState {
 
 #if ENABLE_DEBUG
 typedef struct debugInfo {
-	uint8_t m_u8NumberOfPackets;
-	uint8_t m_u8CountNodeTwo;
-	uint8_t m_u8CountNodeThree;
-	uint8_t m_u8CountNodeFour;
-	uint8_t m_u8CountNothing;
 	uint16_t m_u16Sensor0;
 	uint16_t m_u16Sensor1;
 	uint16_t m_u16Sensor2;
@@ -114,8 +110,24 @@ uint8_t getBit( uint8_t val, uint8_t pos ) {
 	return 0;
 }
 
+uint8_t getNextSetBit( uint8_t val ) {
+	int i=0;
+
+	for( ; i<8; i++ ) {
+		if( val & (1<<i) ) {
+			return i;
+		}
+	}
+
+	return 8;
+}
+
 uint8_t setBit( uint8_t val, uint8_t pos ) {
 	return (val|(1<<pos));
+}
+
+uint8_t resetBit( uint8_t val, uint8_t pos ) {
+	return ( val & (~(1<<pos)));
 }
 
 uint8_t numSetBit( uint8_t val ) {

@@ -43,6 +43,9 @@ module SensingP {
 	void add_node_for_storage( uint8_t pos, uint8_t node );
 	void add_data( uint8_t node, uint16_t data );
 	void check_data_sanity();
+	void check_for_fault_tolerance();
+	void start_standby_mode_to_sensing();
+	void manage_fault_counter( int pos0, int pos1, int pos2);
 
 	struct sockaddr_in6 route_dest;
 	struct sockaddr_in6 multicast;
@@ -83,11 +86,6 @@ module SensingP {
 
 		leaderState.m_u8NumOfSlavesInNetwork = 0;
 #if ENABLE_DEBUG
-		debugInfo.m_u8NumberOfPackets = 0;
-		debugInfo.m_u8CountNodeTwo = 0;
-		debugInfo.m_u8CountNodeThree = 0;
-		debugInfo.m_u8CountNodeFour = 0;
-		debugInfo.m_u8CountNothing = 0;
 #endif
 	}
 
@@ -114,15 +112,19 @@ module SensingP {
 		char retValue[200];
 
 		if( argc > 1  ){
-			if( atoi(argv[1]) == 1 ) {
-				sprintf(retValue, "NodeId=%d\nBatteryLevel=%d\nRequestId=%d\n", debugInfo.m_puLastPacket.m_u8NodeId, debugInfo.m_puLastPacket.m_u8BatteryLevel, debugInfo.m_puLastPacket.m_u8RequestId );
+			if( !strcmp( argv[1], "help") ) {
+				sprintf(retValue, "\nTry $debug [1...4].\n1=>Node Info\n2=>Sync Info\n3=>Leader Info\n4.Sensor Information[For Leader]\n");
+			} else if( atoi(argv[1]) == 1 ) {
+				sprintf(retValue, "\nNodeId=%d\nBatteryLevel=%d\nRequestId=%d\n", debugInfo.m_puLastPacket.m_u8NodeId, debugInfo.m_puLastPacket.m_u8BatteryLevel, debugInfo.m_puLastPacket.m_u8RequestId );
 			} else if (atoi(argv[1]) == 2 ) {
-				sprintf( retValue, "NodePresent=%d\nSense=%d\nStandby=%d\nFailure=%d\n", sensorState.m_u8NodePresent, sensorState.m_sSyncInfo.m_u8SenseRole, sensorState.m_sSyncInfo.m_u8StandyRole, sensorState.m_sSyncInfo.m_u8FailureRole );
+				sprintf( retValue, "\nNodePresent=%d\nSense=%d\nStandby=%d\nFailure=%d\n", sensorState.m_u8NodePresent, sensorState.m_sSyncInfo.m_u8SenseRole, sensorState.m_sSyncInfo.m_u8StandyRole, sensorState.m_sSyncInfo.m_u8FailureRole );
 			} else if ( atoi(argv[1] ) == 3 ) {
-				sprintf( retValue, "Avg=%d\nS0=%d\nS1=%d\nS2=%d\n", sensorState.m_u16AverageData, debugInfo.m_u16Sensor0, debugInfo.m_u16Sensor1, debugInfo.m_u16Sensor2 );
+				sprintf( retValue, "\nLeaderId=%d\nLeaderBatteryLevel\n", sensorState.m_u16AverageData, debugInfo.m_u16Sensor0, debugInfo.m_u16Sensor1, debugInfo.m_u16Sensor2 );
+			} else if ( atoi(argv[1] ) == 4 ) {
+				sprintf( retValue, "\nAvg=%d\nS0=%d\nS1=%d\nS2=%d\n", sensorState.m_u16AverageData, debugInfo.m_u16Sensor0, debugInfo.m_u16Sensor1, debugInfo.m_u16Sensor2 );
 			}
 		} else {
-			sprintf(retValue, "Lead=%d\nLeadBat=%d\nNumPack=%d\nTwoC=%d\nThreeC=%d\nFourC=%d\nNo=%d\nLReq=%d\n", sensorState.m_u8LeaderId, sensorState.m_u8LeaderBatteryLevel, debugInfo.m_u8NumberOfPackets, debugInfo.m_u8CountNodeTwo, debugInfo.m_u8CountNodeThree, debugInfo.m_u8CountNodeFour, debugInfo.m_u8CountNothing, sensorState.m_u8LastRequest );
+			sprintf(retValue, "Try: $debug help\n" );
 		}
 
 		return retValue;
@@ -156,9 +158,6 @@ module SensingP {
 		headerPtr = (header_t*) tempData;
 		switch(headerPtr->m_u8Type) {
 			case MESSAGE_TYPE_LEADER_SELECTION:
-#if ENABLE_DEBUG
-				debugInfo.m_u8NumberOfPackets++;
-#endif
 				if( sizeof(leader_selection_t) == headerPtr->m_u8PayloadSize ) {
 					checkLeaderSelectionPkt((uint8_t*)tempData + sizeof(header_t));
 				}
@@ -208,20 +207,9 @@ module SensingP {
 
 	void checkLeaderSelectionPkt( void *data ) {
 		leader_selection_t *leaderSelectionData = (leader_selection_t*) data;
-#if ENABLE_DEBUG
-		if( 2 == leaderSelectionData->m_u8NodeId ) {
-			debugInfo.m_u8CountNodeTwo++;
-		} else if( 3 == leaderSelectionData->m_u8NodeId ) {
-			debugInfo.m_u8CountNodeThree++;
 
-		} else if( 4 == leaderSelectionData->m_u8NodeId ) {
-			debugInfo.m_u8CountNodeFour++;
-		} else  {
-			debugInfo.m_u8CountNothing++;
-		}
-#endif
 		memcpy( &debugInfo.m_puLastPacket, data, sizeof(leader_selection_t) );
-		if( leaderSelectionData->m_u8NodeId > 10 )
+		if( leaderSelectionData->m_u8NodeId > 7 )
 			return;
 
 		sensorState.m_u8NodePresent = setBit(sensorState.m_u8NodePresent, leaderSelectionData->m_u8NodeId );
@@ -291,6 +279,8 @@ module SensingP {
 
 		if( getBit(sensorState.m_sSyncInfo.m_u8SenseRole, TOS_NODE_ID) ) {
 			call Leds.led1On();
+			call Leds.led0Off();
+			call Leds.led2Off();
 			call SenseTimer.startPeriodic(3000);
 			//call WatchDogTimer.startOneShot(20000);
 			//Wait for 20 seconds to be contacted from the leader otherwise select the next leader and proceed.
@@ -298,6 +288,8 @@ module SensingP {
 			call Leds.led2On();
 		} else if( getBit(sensorState.m_sSyncInfo.m_u8FailureRole, TOS_NODE_ID ) ) {
 			call Leds.set(7);
+			call SenseTimer.stop();
+			//Stop sensing
 		}
 	}
 
@@ -358,8 +350,60 @@ module SensingP {
 		}
 	}
 
+	void manage_fault_counter( int pos0, int pos1, int pos2) {
+		if( pos0 ) {
+			sensorState.m_sStorageData.m_u16FailureCount[0]++;
+		} else {
+			sensorState.m_sStorageData.m_u16FailureCount[0] = 0;
+		}
+		if( pos1 ) {
+			sensorState.m_sStorageData.m_u16FailureCount[1]++;
+		} else {
+			sensorState.m_sStorageData.m_u16FailureCount[1] = 0;
+		}
+		if( pos2 ) {
+			sensorState.m_sStorageData.m_u16FailureCount[2]++;
+		} else {
+			sensorState.m_sStorageData.m_u16FailureCount[2] = 0;
+		}
+	}
+
+	void start_standby_mode_to_sensing() {
+		int pos;
+
+		pos = getNextSetBit(sensorState.m_sSyncInfo.m_u8StandyRole);
+		if( 8 == pos ) {
+			//No more extra sensor to replace so disable the network
+			sensorState.m_sSyncInfo.m_u8StandyRole = resetBit(sensorState.m_sSyncInfo.m_u8StandyRole, pos);
+			//Entire network fails!!!
+			memset( &sensorState.m_sSyncInfo.m_u8FailureRole, 1, 1);
+		} else {
+			sensorState.m_sSyncInfo.m_u8SenseRole = setBit(sensorState.m_sSyncInfo.m_u8SenseRole, pos);
+		}
+
+		post sync_role();
+		if( TOS_NODE_ID == pos ) {
+			//The leader has failed itself do something here !!!
+		}
+
+	}
+
+	void check_for_fault_tolerance() {
+		int i=0;
+		for( ; i<3; i++ ) {
+			if( sensorState.m_sStorageData.m_u16FailureCount[i] > 5 ) {
+				//Some node has failed. Try to reset this node and do something !!!!
+				//Get a node from the standby mode and make it active !!!
+				start_standby_mode_to_sensing();
+				//Resend the sync signal
+			}
+
+		}
+	}
+
 	void check_data_sanity() {
 		uint8_t i=0, a1=0, a2=0, a3=0;
+		uint8_t fault_pos0 = 0, fault_pos1 = 0, fault_pos2 = 0;
 		uint16_t u16Average = 0;
 
 		for( ; i<3; i++ ) {
@@ -369,29 +413,35 @@ module SensingP {
 			}
 		}
 
-		if( get_absolute( sensorState.m_sStorageData.m_u16Data[0] - sensorState.m_sStorageData.m_u16Data[1] ) > 20 ) {
+		if( get_absolute( sensorState.m_sStorageData.m_u16Data[0] - sensorState.m_sStorageData.m_u16Data[1] ) > 100 ) {
 			a1 = 1;
 		}
 
-		if( get_absolute( sensorState.m_sStorageData.m_u16Data[1] - sensorState.m_sStorageData.m_u16Data[2] ) > 20 ) {
+		if( get_absolute( sensorState.m_sStorageData.m_u16Data[1] - sensorState.m_sStorageData.m_u16Data[2] ) > 100 ) {
 			a2 = 1;
 		}
 
-		if( get_absolute( sensorState.m_sStorageData.m_u16Data[0] - sensorState.m_sStorageData.m_u16Data[2] ) > 20 ) {
+		if( get_absolute( sensorState.m_sStorageData.m_u16Data[0] - sensorState.m_sStorageData.m_u16Data[2] ) > 100 ) {
 			a3 = 1;
 		}
 		if( a1 && a2 && a3 ) {
 			//All nodes have failed
 			u16Average = 0;
+			fault_pos0 = 1;
+			fault_pos1 = 1;
+			fault_pos2 = 1;
 		} else if( a1 && a3 ) {
 			//0 has failed
 			u16Average = (sensorState.m_sStorageData.m_u16Data[1] + sensorState.m_sStorageData.m_u16Data[2])>>1;
+			fault_pos0 = 1;
 		} else if( a2 && a3 ) {
 			//2 has failed
 			u16Average = (sensorState.m_sStorageData.m_u16Data[0] + sensorState.m_sStorageData.m_u16Data[1])>>1;
+			fault_pos2 = 1;
 		} else if( a1 && a2 ) {
 			//1 has failed
 			u16Average = (sensorState.m_sStorageData.m_u16Data[0] + sensorState.m_sStorageData.m_u16Data[2])>>1;
+			fault_pos1 = 1;
 		} else if( a1 || a2 || a3 ) {
 			//Some anomaly is occuring
 			u16Average = (sensorState.m_sStorageData.m_u16Data[0] + sensorState.m_sStorageData.m_u16Data[1] + sensorState.m_sStorageData.m_u16Data[2] )/3;
@@ -401,6 +451,8 @@ module SensingP {
 		}
 		sensorState.m_u16AverageData = u16Average;
 		memset( &sensorState.m_sStorageData.m_u8DataAvail, 0, sizeof(sensorState.m_sStorageData.m_u8DataAvail));
+		manage_fault_counter(fault_pos0, fault_pos1, fault_pos2 );
+		check_for_fault_tolerance();
 #if ENABLE_DEBUG
 		debugInfo.m_u16Sensor0 = sensorState.m_sStorageData.m_u16Data[0];
 		debugInfo.m_u16Sensor1 = sensorState.m_sStorageData.m_u16Data[1];
