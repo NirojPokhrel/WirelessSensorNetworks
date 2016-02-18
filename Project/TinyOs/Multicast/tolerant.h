@@ -5,6 +5,7 @@
 #include "sensing.h"
 #define MAX_NUMBER_OF_SLAVES 8
 #define ENABLE_DEBUG 1
+#define NEW_SENSOR_START 2
 enum {
   SENSOR_STATE_LEADER = 50,
   SENSOR_STATE_SENSE = 51,
@@ -52,6 +53,7 @@ typedef struct dataPacket {
 typedef struct dataStorage {
 	uint8_t m_u8DataAvail[3];
 	uint8_t m_u8NodeId[3];
+	uint8_t m_u8NewNode[3];
 	uint16_t m_u16Data[3];
 	uint16_t m_u16FailureCount[3];
 } data_storage_t;

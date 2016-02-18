@@ -32,8 +32,8 @@ configuration SensingC {
 	SensingP.SyncTimer -> SyncTimer;
 	components new TimerMilliC() as SenseTimer;
 	SensingP.SenseTimer -> SenseTimer;
-	components new TimerMilliC() as WatchDogTimer;
-	SensingP.WatchDogTimer -> WatchDogTimer;
+	components new TimerMilliC() as VoltageSensing;
+	SensingP.VoltageSensing -> VoltageSensing;
 	components new TimerMilliC() as DataCollectionTimer;
 	SensingP.DataCollectionTimer -> DataCollectionTimer;
 

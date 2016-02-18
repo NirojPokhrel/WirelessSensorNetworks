@@ -18,7 +18,7 @@ module SensingP {
 		interface Timer<TMilli> as WaitTimer;
 		interface Timer<TMilli> as SyncTimer;
 		interface Timer<TMilli> as SenseTimer;
-		interface Timer<TMilli> as WatchDogTimer;
+		interface Timer<TMilli> as VoltageSensing;
 		interface Timer<TMilli> as DataCollectionTimer;
 
 		interface Read<uint16_t> as LightPar;
@@ -44,7 +44,7 @@ module SensingP {
 	void add_data( uint8_t node, uint16_t data );
 	void check_data_sanity();
 	void check_for_fault_tolerance();
-	void start_standby_mode_to_sensing();
+	uint8_t start_standby_mode_to_sensing();
 	void manage_fault_counter( int pos0, int pos1, int pos2);
 
 	struct sockaddr_in6 route_dest;
@@ -85,8 +85,6 @@ module SensingP {
 		sensorState.m_u8NodePresent = setBit(sensorState.m_u8NodePresent, TOS_NODE_ID );
 
 		leaderState.m_u8NumOfSlavesInNetwork = 0;
-#if ENABLE_DEBUG
-#endif
 	}
 
 	//radio
@@ -119,7 +117,7 @@ module SensingP {
 			} else if (atoi(argv[1]) == 2 ) {
 				sprintf( retValue, "\nNodePresent=%d\nSense=%d\nStandby=%d\nFailure=%d\n", sensorState.m_u8NodePresent, sensorState.m_sSyncInfo.m_u8SenseRole, sensorState.m_sSyncInfo.m_u8StandyRole, sensorState.m_sSyncInfo.m_u8FailureRole );
 			} else if ( atoi(argv[1] ) == 3 ) {
-				sprintf( retValue, "\nLeaderId=%d\nLeaderBatteryLevel\n", sensorState.m_u16AverageData, debugInfo.m_u16Sensor0, debugInfo.m_u16Sensor1, debugInfo.m_u16Sensor2 );
+				sprintf( retValue, "\nLeaderId=%d\nLeaderBatteryLevel=%d\n", sensorState.m_u8LeaderId, sensorState.m_u8LeaderBatteryLevel );
 			} else if ( atoi(argv[1] ) == 4 ) {
 				sprintf( retValue, "\nAvg=%d\nS0=%d\nS1=%d\nS2=%d\n", sensorState.m_u16AverageData, debugInfo.m_u16Sensor0, debugInfo.m_u16Sensor1, debugInfo.m_u16Sensor2 );
 			}
@@ -221,6 +219,7 @@ module SensingP {
 				sensorState.m_u8LeaderId = leaderSelectionData->m_u8NodeId;
 			}
 		} 
+		//Check if this is the first time without the failure node or is it with the failure leader. If the leader has failed then retry.
 		if( TOS_NODE_ID  == (leaderSelectionData->m_u8NodeId+1)) 
 		{
 			post multicast_leaderSelection();
@@ -282,7 +281,7 @@ module SensingP {
 			call Leds.led0Off();
 			call Leds.led2Off();
 			call SenseTimer.startPeriodic(3000);
-			//call WatchDogTimer.startOneShot(20000);
+			//call VoltageSensing.startOneShot(20000);
 			//Wait for 20 seconds to be contacted from the leader otherwise select the next leader and proceed.
 		} else if( getBit(sensorState.m_sSyncInfo.m_u8StandyRole, TOS_NODE_ID) ) {
 			call Leds.led2On();
@@ -297,6 +296,7 @@ module SensingP {
 		uint8_t i, count = 0;
 
 		memset(&sensorState.m_sSyncInfo, 0, sizeof(sync_packet_t));
+		memset(&sensorState.m_sStorageData, 0, sizeof(data_storage_t));
 
 		add_node_for_storage( 0, TOS_NODE_ID);
 		for( i=2; i<8; i++ ) {
@@ -335,7 +335,9 @@ module SensingP {
 	}
 
 	void add_node_for_storage( uint8_t pos, uint8_t node ) {
+		//New node is being added in the network
 		sensorState.m_sStorageData.m_u8NodeId[pos] = node;
+		sensorState.m_sStorageData.m_u8NewNode[pos] = 1;
 	}
 
 	void add_data( uint8_t node, uint16_t data ) {
@@ -347,6 +349,11 @@ module SensingP {
 				sensorState.m_sStorageData.m_u8DataAvail[i] = 1;
 				break;
 			}
+		}
+
+		if( 3 == i ) {
+		//Something has gone wrong maybe the failure node has not got the sync packet 
+			post sync_role();
 		}
 	}
 
@@ -368,7 +375,7 @@ module SensingP {
 		}
 	}
 
-	void start_standby_mode_to_sensing() {
+	uint8_t start_standby_mode_to_sensing() {
 		int pos;
 
 		pos = getNextSetBit(sensorState.m_sSyncInfo.m_u8StandyRole);
@@ -381,21 +388,37 @@ module SensingP {
 			sensorState.m_sSyncInfo.m_u8SenseRole = setBit(sensorState.m_sSyncInfo.m_u8SenseRole, pos);
 		}
 
-		post sync_role();
-		if( TOS_NODE_ID == pos ) {
-			//The leader has failed itself do something here !!!
-		}
-
+		return pos;
 	}
 
 	void check_for_fault_tolerance() {
-		int i=0;
+		int i=0, node_id;
 		for( ; i<3; i++ ) {
 			if( sensorState.m_sStorageData.m_u16FailureCount[i] > 5 ) {
 				//Some node has failed. Try to reset this node and do something !!!!
 				//Get a node from the standby mode and make it active !!!
-				start_standby_mode_to_sensing();
-				//Resend the sync signal
+				if( sensorState.m_sStorageData.m_u8NewNode[i] ) {
+					//Implicit Watchdog approach. If no new node is received send the sync role packet for all the node to sync up again.
+					post sync_role();
+					return;
+				}
+
+				sensorState.m_sSyncInfo.m_u8SenseRole = resetBit(sensorState.m_sSyncInfo.m_u8SenseRole, sensorState.m_sStorageData.m_u8NodeId[i]);
+				sensorState.m_sSyncInfo.m_u8FailureRole = setBit(sensorState.m_sSyncInfo.m_u8FailureRole, sensorState.m_sStorageData.m_u8NodeId[i]);
+				node_id = start_standby_mode_to_sensing();
+				if( 8 == node_id ) {
+					//RETURN ERROR. No more valid 
+					return;
+				}
+				add_node_for_storage( i, node_id );
+				memset(&sensorState.m_sStorageData.m_u16FailureCount, 0, sizeof(sensorState.m_sStorageData.m_u16FailureCount));
+
+				post sync_role();
+				if( TOS_NODE_ID == pos ) {
+					//The leader has failed itself do something here !!!
+				}
+
+				break;
 			}
 
 		}
@@ -408,8 +431,11 @@ module SensingP {
 
 		for( ; i<3; i++ ) {
 			if( sensorState.m_sStorageData.m_u8DataAvail[i] != 1 ) {
-				//Increase Data Absence bit
-				sensorState.m_sStorageData.m_u16Data[0] = 0;
+				//Increase Data Absence bit 
+				sensorState.m_sStorageData.m_u16Data[i] = 0xFFFF;
+				//Check if it is first time of the node and it has not started yet then make sure to resend the sync signals again
+			} else {
+				sensorState.m_sStorageData.m_u8NewNode[i] = 0;
 			}
 		}
 
@@ -497,7 +523,7 @@ module SensingP {
 		call LightPar.read();
   	}
 
-  	event void WatchDogTimer.fired() {
+  	event void VoltageSensing.fired() {
 
   	}
 
