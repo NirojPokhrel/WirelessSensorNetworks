@@ -21,6 +21,7 @@ enum {
   MESSAGE_TYPE_LEADER_SYNC_ROLE_RESEND = 115,
   MESSAGE_TYPE_REQUEST_PACKET = 116,
   MESSAGE_TYPE_DATA_PACKET = 117,
+  MESSAGE_TYPE_CHANGE_LEADER = 118,
 };
 
 typedef nx_struct settings {
@@ -58,6 +59,12 @@ typedef struct dataStorage {
 	uint16_t m_u16FailureCount[3];
 } data_storage_t;
 
+typedef struct nodeList {
+	uint8_t m_u8NumOfNode;
+	uint8_t m_u8NodeId[6];
+	uint8_t m_u8BatteryLevel[6];
+} node_list_t;
+
 typedef struct sensor_state { 
 	uint8_t m_u8CurrentState;
 	uint8_t m_u8NodeRole;
@@ -70,7 +77,13 @@ typedef struct sensor_state {
 	uint16_t m_u16AverageData;
 	sync_packet_t m_sSyncInfo;
 	data_storage_t m_sStorageData;
+	node_list_t m_sNodeList;
 } sensor_state_t;
+
+typedef struct changeLeader {
+	uint8_t m_u8NodeId;
+	uint8_t m_u8BatteryLevel;
+} change_leader_t;
 
 typedef struct slaveinfo {
 	uint8_t m_u8SlaveId;

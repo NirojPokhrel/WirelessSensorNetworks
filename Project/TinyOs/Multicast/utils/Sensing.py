@@ -7,14 +7,14 @@
 import tinyos.message.Message
 
 # The default size of this message type in bytes.
-DEFAULT_MESSAGE_SIZE = 4
+DEFAULT_MESSAGE_SIZE = 6
 
 # The Active Message type associated with this message.
 AM_TYPE = -1
 
 class Sensing(tinyos.message.Message.Message):
-    # Create a new Sensing of size 4.
-    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=4):
+    # Create a new Sensing of size 6.
+    def __init__(self, data="", addr=None, gid=None, base_offset=0, data_length=6):
         tinyos.message.Message.Message.__init__(self, data, addr, gid, base_offset, data_length)
         self.amTypeSet(AM_TYPE)
     
@@ -36,6 +36,14 @@ class Sensing(tinyos.message.Message.Message):
             pass
         try:
             s += "  [sensor_value=0x%x]\n" % (self.get_sensor_value())
+        except:
+            pass
+        try:
+            s += "  [leader_id=0x%x]\n" % (self.get_leader_id())
+        except:
+            pass
+        try:
+            s += "  [failed_node=0x%x]\n" % (self.get_failed_node())
         except:
             pass
         return s
@@ -151,4 +159,114 @@ class Sensing(tinyos.message.Message.Message):
     #
     def sizeBits_sensor_value(self):
         return 16
+    
+    #
+    # Accessor methods for field: leader_id
+    #   Field type: short
+    #   Offset (bits): 32
+    #   Size (bits): 8
+    #
+
+    #
+    # Return whether the field 'leader_id' is signed (False).
+    #
+    def isSigned_leader_id(self):
+        return False
+    
+    #
+    # Return whether the field 'leader_id' is an array (False).
+    #
+    def isArray_leader_id(self):
+        return False
+    
+    #
+    # Return the offset (in bytes) of the field 'leader_id'
+    #
+    def offset_leader_id(self):
+        return (32 / 8)
+    
+    #
+    # Return the offset (in bits) of the field 'leader_id'
+    #
+    def offsetBits_leader_id(self):
+        return 32
+    
+    #
+    # Return the value (as a short) of the field 'leader_id'
+    #
+    def get_leader_id(self):
+        return self.getUIntElement(self.offsetBits_leader_id(), 8, 1)
+    
+    #
+    # Set the value of the field 'leader_id'
+    #
+    def set_leader_id(self, value):
+        self.setUIntElement(self.offsetBits_leader_id(), 8, value, 1)
+    
+    #
+    # Return the size, in bytes, of the field 'leader_id'
+    #
+    def size_leader_id(self):
+        return (8 / 8)
+    
+    #
+    # Return the size, in bits, of the field 'leader_id'
+    #
+    def sizeBits_leader_id(self):
+        return 8
+    
+    #
+    # Accessor methods for field: failed_node
+    #   Field type: short
+    #   Offset (bits): 40
+    #   Size (bits): 8
+    #
+
+    #
+    # Return whether the field 'failed_node' is signed (False).
+    #
+    def isSigned_failed_node(self):
+        return False
+    
+    #
+    # Return whether the field 'failed_node' is an array (False).
+    #
+    def isArray_failed_node(self):
+        return False
+    
+    #
+    # Return the offset (in bytes) of the field 'failed_node'
+    #
+    def offset_failed_node(self):
+        return (40 / 8)
+    
+    #
+    # Return the offset (in bits) of the field 'failed_node'
+    #
+    def offsetBits_failed_node(self):
+        return 40
+    
+    #
+    # Return the value (as a short) of the field 'failed_node'
+    #
+    def get_failed_node(self):
+        return self.getUIntElement(self.offsetBits_failed_node(), 8, 1)
+    
+    #
+    # Set the value of the field 'failed_node'
+    #
+    def set_failed_node(self, value):
+        self.setUIntElement(self.offsetBits_failed_node(), 8, value, 1)
+    
+    #
+    # Return the size, in bytes, of the field 'failed_node'
+    #
+    def size_failed_node(self):
+        return (8 / 8)
+    
+    #
+    # Return the size, in bits, of the field 'failed_node'
+    #
+    def sizeBits_failed_node(self):
+        return 8
     

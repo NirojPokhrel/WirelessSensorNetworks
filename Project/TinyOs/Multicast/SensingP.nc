@@ -32,12 +32,14 @@ module SensingP {
 	task void request_resendSyncRole();
 	task void send_data();
 	task void report_data_to_admin();
+	task void initiate_change_leader();
 
 	void checkLeaderSelectionPkt( void *data );
 	void replyNodeIdToLeader(void *data);
 	void addSlaveToNetwork(void *data);
 	void addRoleToSlaves(void *data );
 	void syncRoles(void *data);
+	void change_leader(void*);
 
 	void store_data(void *data);
 	void add_node_for_storage( uint8_t pos, uint8_t node );
@@ -83,6 +85,7 @@ module SensingP {
 		sensorState.m_u8LastRequest = 0;
 		sensorState.m_u8NodePresent = 0;
 		sensorState.m_u8NodePresent = setBit(sensorState.m_u8NodePresent, TOS_NODE_ID );
+		sensorState.m_sNodeList.m_u8NumOfNode = 0;
 
 		leaderState.m_u8NumOfSlavesInNetwork = 0;
 	}
@@ -199,6 +202,11 @@ module SensingP {
 					}
 				}
 			break;
+			case MESSAGE_TYPE_CHANGE_LEADER:
+				if( sizeof(change_leader_t) == headerPtr->m_u8PayloadSize ) {
+					change_leader(tempData+sizeof(header_t));
+				}
+			break;
 
 		}
 	}
@@ -211,6 +219,9 @@ module SensingP {
 			return;
 
 		sensorState.m_u8NodePresent = setBit(sensorState.m_u8NodePresent, leaderSelectionData->m_u8NodeId );
+		sensorState.m_sNodeList.m_u8NodeId[sensorState.m_sNodeList.m_u8NumOfNode] = leaderSelectionData->m_u8NodeId;
+		sensorState.m_sNodeList.m_u8BatteryLevel[sensorState.m_sNodeList.m_u8NumOfNode] = leaderSelectionData->m_u8BatteryLevel;
+		sensorState.m_sNodeList.m_u8NumOfNode++;
 		if( sensorState.m_u8LeaderBatteryLevel < leaderSelectionData->m_u8BatteryLevel) {
 			sensorState.m_u8LeaderBatteryLevel = leaderSelectionData->m_u8BatteryLevel;
 			sensorState.m_u8LeaderId = leaderSelectionData->m_u8NodeId;
@@ -392,7 +403,7 @@ module SensingP {
 	}
 
 	void check_for_fault_tolerance() {
-		int i=0, node_id;
+		uint8_t i=0, node_id, failed_node;
 		for( ; i<3; i++ ) {
 			if( sensorState.m_sStorageData.m_u16FailureCount[i] > 5 ) {
 				//Some node has failed. Try to reset this node and do something !!!!
@@ -402,7 +413,7 @@ module SensingP {
 					post sync_role();
 					return;
 				}
-
+				failed_node = sensorState.m_sStorageData.m_u8NodeId[i];
 				sensorState.m_sSyncInfo.m_u8SenseRole = resetBit(sensorState.m_sSyncInfo.m_u8SenseRole, sensorState.m_sStorageData.m_u8NodeId[i]);
 				sensorState.m_sSyncInfo.m_u8FailureRole = setBit(sensorState.m_sSyncInfo.m_u8FailureRole, sensorState.m_sStorageData.m_u8NodeId[i]);
 				node_id = start_standby_mode_to_sensing();
@@ -414,8 +425,9 @@ module SensingP {
 				memset(&sensorState.m_sStorageData.m_u16FailureCount, 0, sizeof(sensorState.m_sStorageData.m_u16FailureCount));
 
 				post sync_role();
-				if( TOS_NODE_ID == pos ) {
+				if( TOS_NODE_ID ==  failed_node ) {
 					//The leader has failed itself do something here !!!
+					post initiate_change_leader();
 				}
 
 				break;
@@ -486,6 +498,30 @@ module SensingP {
 #endif
 		post report_data_to_admin();
 	}
+
+	void change_leader(void *data) {
+		int i = 0, pos = 0;
+		change_leader_t *psNewLeader;
+
+		psNewLeader = (change_leader_t *)data;
+		sensorState.m_u8LeaderId = psNewLeader->m_u8NodeId;
+		sensorState.m_u8LeaderBatteryLevel = psNewLeader->m_u8BatteryLevel;
+		if( TOS_NODE_ID == sensorState.m_u8LeaderId ) {
+  			call Leds.led0On();
+  			call Leds.led1Off();
+  			call Leds.led2Off();
+			call DataCollectionTimer.startPeriodic(5000);
+		}
+
+		//add_node_for_storage();
+		for( i=2;i<8; i++ ) {
+			if( getBit(sensorState.m_sSyncInfo.m_u8SenseRole, i) ) {
+				add_node_for_storage(pos++,i);
+			}
+		}
+	}
+
+
 
 	event void LightPar.readDone(error_t e, uint16_t val) {
 		sensorState.m_u16LighPar = val;
@@ -617,9 +653,47 @@ module SensingP {
 	}
 
 	task void report_data_to_admin() {
+		//Sending Packet to PC
 		reportAdmin.node_id = TOS_NODE_ID;
 		reportAdmin.sensor_value = sensorState.m_u16AverageData;
+		reportAdmin.leader_id = sensorState.m_u8LeaderId;
+		if( sensorState.m_sSyncInfo.m_u8FailureRole ) {
+			reportAdmin.failed_node = getNextSetBit(sensorState.m_sSyncInfo.m_u8FailureRole);
+		} else {
+			reportAdmin.failed_node = 0;
+		}
 
 		call UserPacket.sendto(&route_dest, &reportAdmin, sizeof(reportAdmin));
+	}
+
+	task void initiate_change_leader() {
+		uint8_t u8NextLeaderId;
+		uint8_t u8NextBatteryLevel = 0;
+		uint8_t i = 0;
+		header_t *psPktHeader;
+		change_leader_t *psNewLeader;
+
+		for( ; i<sensorState.m_sNodeList.m_u8NumOfNode; i++ ) {
+			if( sensorState.m_sNodeList.m_u8BatteryLevel[i] > u8NextBatteryLevel ) {
+				u8NextLeaderId = sensorState.m_sNodeList.m_u8NodeId[i];
+				u8NextBatteryLevel = sensorState.m_sNodeList.m_u8BatteryLevel[i];
+			}
+		}
+
+
+		psPktHeader = (header_t*)settingsBuffer;
+		psPktHeader->m_u8Type = MESSAGE_TYPE_CHANGE_LEADER;
+		psPktHeader->m_u8PayloadSize = sizeof(change_leader_t);
+
+		psNewLeader = (change_leader_t*) (settingsBuffer+sizeof(header_t));
+		psNewLeader->m_u8NodeId = u8NextLeaderId;
+		psNewLeader->m_u8BatteryLevel = u8NextBatteryLevel;
+
+		sensorState.m_u8LeaderId = u8NextLeaderId;
+		sensorState.m_u8LeaderBatteryLevel = u8NextBatteryLevel;
+		call SenseTimer.stop();
+		call DataCollectionTimer.stop();
+		call Leds.set(7);
+		call UserPacket.sendto(&multicast, settingsBuffer, sizeof(header_t)+psPktHeader->m_u8PayloadSize);
 	}
 }

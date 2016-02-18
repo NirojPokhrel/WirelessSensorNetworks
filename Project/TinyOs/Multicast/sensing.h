@@ -9,6 +9,8 @@ enum {
 nx_struct alarm_report {
   nx_uint16_t node_id;;
   nx_uint16_t sensor_value;
+  nx_uint8_t leader_id;
+  nx_uint8_t failed_node;
 } ;
 
 #endif
