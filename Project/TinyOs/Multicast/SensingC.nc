@@ -37,7 +37,9 @@ configuration SensingC {
 	components new TimerMilliC() as DataCollectionTimer;
 	SensingP.DataCollectionTimer -> DataCollectionTimer;
 
-	
+	components new VoltageC();
+	SensingP.Volt -> VoltageC.Read;
+
 	components new HamamatsuS1087ParC() as SensorPar;
 	SensingP.LightPar -> SensorPar;
 }

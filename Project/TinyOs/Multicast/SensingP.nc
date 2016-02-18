@@ -22,6 +22,7 @@ module SensingP {
 		interface Timer<TMilli> as DataCollectionTimer;
 
 		interface Read<uint16_t> as LightPar;
+		interface Read<uint16_t> as Volt;
 	}
 } implementation {
 	task void multicast_leaderSelection();
@@ -81,13 +82,14 @@ module SensingP {
 
 		sensorState.m_u8BatteryLevel = TOS_NODE_ID+10;
 		sensorState.m_u8LeaderId = TOS_NODE_ID;
-		sensorState.m_u8LeaderBatteryLevel = TOS_NODE_ID+10;
+		sensorState.m_u8LeaderBatteryLevel = sensorState.m_u8BatteryLevel;
 		sensorState.m_u8LastRequest = 0;
 		sensorState.m_u8NodePresent = 0;
 		sensorState.m_u8NodePresent = setBit(sensorState.m_u8NodePresent, TOS_NODE_ID );
 		sensorState.m_sNodeList.m_u8NumOfNode = 0;
 
 		leaderState.m_u8NumOfSlavesInNetwork = 0;
+		call Volt.read();
 	}
 
 	//radio
@@ -116,7 +118,7 @@ module SensingP {
 			if( !strcmp( argv[1], "help") ) {
 				sprintf(retValue, "\nTry $debug [1...4].\n1=>Node Info\n2=>Sync Info\n3=>Leader Info\n4.Sensor Information[For Leader]\n");
 			} else if( atoi(argv[1]) == 1 ) {
-				sprintf(retValue, "\nNodeId=%d\nBatteryLevel=%d\nRequestId=%d\n", debugInfo.m_puLastPacket.m_u8NodeId, debugInfo.m_puLastPacket.m_u8BatteryLevel, debugInfo.m_puLastPacket.m_u8RequestId );
+				sprintf(retValue, "\nNodeId=%d\nBatteryLevel=%d\n", TOS_NODE_ID, sensorState.m_u8BatteryLevel );
 			} else if (atoi(argv[1]) == 2 ) {
 				sprintf( retValue, "\nNodePresent=%d\nSense=%d\nStandby=%d\nFailure=%d\n", sensorState.m_u8NodePresent, sensorState.m_sSyncInfo.m_u8SenseRole, sensorState.m_sSyncInfo.m_u8StandyRole, sensorState.m_sSyncInfo.m_u8FailureRole );
 			} else if ( atoi(argv[1] ) == 3 ) {
@@ -144,7 +146,8 @@ module SensingP {
 		psPktHeader->m_u8PayloadSize = sizeof(leader_selection_t);
 
 		psLeaderPkt = (leader_selection_t*) ((uint8_t*)settingsBuffer+sizeof(header_t));
-		psLeaderPkt->m_u8BatteryLevel = TOS_NODE_ID+10;
+		//psLeaderPkt->m_u8BatteryLevel = TOS_NODE_ID+10;
+		psLeaderPkt->m_u8BatteryLevel = sensorState.m_u8BatteryLevel;
 		psLeaderPkt->m_u8NodeId = TOS_NODE_ID;
 		psLeaderPkt->m_u8RequestId = sensorState.m_u8LastRequest;
 
@@ -521,8 +524,6 @@ module SensingP {
 		}
 	}
 
-
-
 	event void LightPar.readDone(error_t e, uint16_t val) {
 		sensorState.m_u16LighPar = val;
 		if( TOS_NODE_ID != sensorState.m_u8LeaderId ) {
@@ -530,6 +531,12 @@ module SensingP {
 		} else {
 			add_data(TOS_NODE_ID, val);
 		}
+	}
+
+	event void Volt.readDone(error_t e, uint16_t val) {
+		//sensorState.m_u8BatteryLevel = ((uint8_t)val>>5)+TOS_NODE_ID;
+		//sensorState.m_u8LeaderBatteryLevel = ((uint8_t)val>>5)+TOS_NODE_ID;
+		//Currently not working in battery mode, so we will just try without one.
 	}
 
   	event void WaitTimer.fired() {
